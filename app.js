@@ -172,6 +172,8 @@ function renderPlayerGrid() {
 function renderTeamPanels() {
     renderTeam('A');
     renderTeam('B');
+    renderTeamChart('A');
+    renderTeamChart('B');
     updateBalanceDisplay();
     updateSideStyles();
 }
@@ -319,6 +321,68 @@ function updateChart(player) {
     });
 }
 
+let teamCharts = { A: null, B: null };
+function renderTeamChart(teamKey) {
+    const ctx = document.getElementById(`team-${teamKey.toLowerCase()}-chart`);
+    if (!window.Chart) return;
+
+    // Calculate team's lane ratings
+    const dataValues = LANES.map(lane => {
+        const playerId = state.teams[teamKey][lane];
+        if (!playerId) return 0;
+        const player = getPlayer(playerId);
+        if (!player) return 0;
+        return player.laneRatings[lane] || player.ratingTotal || 0;
+    });
+
+    // Destroy existing chart
+    if (teamCharts[teamKey]) {
+        teamCharts[teamKey].destroy();
+    }
+
+    // Create new chart
+    const color = teamKey === 'A' ? 'rgba(88, 166, 255, 0.6)' : 'rgba(248, 81, 73, 0.6)';
+    const borderColor = teamKey === 'A' ? 'rgb(88, 166, 255)' : 'rgb(248, 81, 73)';
+
+    teamCharts[teamKey] = new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels: LANES,
+            datasets: [{
+                label: `Team ${teamKey}`,
+                data: dataValues,
+                fill: true,
+                backgroundColor: color,
+                borderColor: borderColor,
+                pointBackgroundColor: borderColor,
+                pointBorderColor: '#fff',
+                pointHoverBackgroundColor: '#fff',
+                pointHoverBorderColor: borderColor
+            }]
+        },
+        options: {
+            scales: {
+                r: {
+                    angleLines: { color: 'rgba(255,255,255,0.1)' },
+                    grid: { color: 'rgba(255,255,255,0.1)' },
+                    pointLabels: {
+                        color: '#f0f6fc',
+                        font: { size: 11 }
+                    },
+                    ticks: {
+                        backdropColor: 'transparent',
+                        color: 'rgba(255, 255, 255, 0.5)',
+                        showLabelBackdrop: false
+                    },
+                    suggestedMin: 0,
+                    suggestedMax: 2500
+                }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
 function updateBalanceDisplay() {
     // Calculate Averages needed
     const getAvg = (team) => {
@@ -373,6 +437,52 @@ function updateBalanceDisplay() {
     } else {
         warnArea.classList.add('hidden');
     }
+
+    // Lane Balance Evaluation
+    updateLaneBalance();
+}
+
+function getLaneBalance() {
+    const balance = {};
+    LANES.forEach(lane => {
+        const playerA = getPlayer(state.teams.A[lane]);
+        const playerB = getPlayer(state.teams.B[lane]);
+        const rateA = playerA?.laneRatings[lane] || playerA?.ratingTotal || 0;
+        const rateB = playerB?.laneRatings[lane] || playerB?.ratingTotal || 0;
+        const diff = rateA - rateB;
+        balance[lane] = {
+            diff,
+            advantage: diff > 50 ? 'A' : diff < -50 ? 'B' : 'Even'
+        };
+    });
+    return balance;
+}
+
+function updateLaneBalance() {
+    const laneBalanceEl = document.getElementById('lane-balance-text');
+    const balance = getLaneBalance();
+
+    const items = LANES.map(lane => {
+        const b = balance[lane];
+        let text = lane;
+        let className = '';
+
+        if (b.advantage === 'A') {
+            text += ': A有利';
+            // A team: blue if A-Blue, red if B-Blue (meaning A is Red)
+            className = state.side === 'A-Blue' ? 'advantage-blue' : state.side === 'B-Blue' ? 'advantage-red' : 'advantage-a';
+        } else if (b.advantage === 'B') {
+            text += ': B有利';
+            // B team: blue if B-Blue, red if A-Blue (meaning B is Red)
+            className = state.side === 'B-Blue' ? 'advantage-blue' : state.side === 'A-Blue' ? 'advantage-red' : 'advantage-b';
+        } else {
+            text += ': 拮抗';
+        }
+
+        return `<span class="lane-item ${className}">${text}</span>`;
+    });
+
+    laneBalanceEl.innerHTML = items.join('');
 }
 
 function updateSideStyles() {

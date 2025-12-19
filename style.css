@@ -289,6 +289,21 @@ body {
     border-color: var(--accent-primary);
 }
 
+.team-chart-container {
+    /* margin-top: 20px;
+    padding: 12px; */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.team-chart-container canvas {
+    max-width: 200px;
+    max-height: 200px;
+}
+
+
+
 /* Center Panel Details */
 .player-detail-card {
     width: 100%;
@@ -309,11 +324,29 @@ body {
 }
 
 .detail-icon {
-    width: 64px;
-    height: 64px;
+    width: 120px;
+    height: 120px;
     border-radius: 50%;
     background: var(--bg-main);
-    border: 2px solid var(--accent-gold);
+    border: 3px solid var(--accent-gold);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.detail-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+.detail-icon .default-icon {
+    font-size: 3rem;
+    font-weight: 600;
+    color: var(--accent-gold);
 }
 
 .detail-info {
@@ -353,6 +386,36 @@ body {
     color: var(--text-primary);
     margin-bottom: 12px;
 }
+
+.lane-balance-text {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 12px;
+    line-height: 1.6;
+}
+
+.lane-balance-text .lane-item {
+    display: inline-block;
+    margin-right: 12px;
+}
+
+.lane-balance-text .advantage-a {
+    color: var(--accent-blue);
+}
+
+.lane-balance-text .advantage-b {
+    color: var(--accent-red);
+}
+
+.lane-balance-text .advantage-blue {
+    color: var(--accent-blue);
+}
+
+.lane-balance-text .advantage-red {
+    color: var(--accent-red);
+}
+
+
 
 /* Tug of War */
 .tug-meter-container {
