@@ -6,6 +6,7 @@
 
 const LANES = ['Top', 'Jg', 'Mid', 'ADC', 'Sup'];
 const MAX_PLAYERS = 14;
+const API_URL = "https://script.google.com/macros/s/AKfycbyYXbjAuq7tBnMyG1D4FIQdXRw3QP5rTLMiOy7ffeRaf3Rmaylk00e4andtwHt5ihjf/exec"; // User to replace this
 
 // State
 let state = {
@@ -18,17 +19,96 @@ let state = {
     selectedPlayerId: null
 };
 
+// UI Elements (Global)
+let drawer, form;
+let pendingIconFile = null; // Store selected file
+
+
+// --- Persistence (GAS) ---
+const loadingOverlay = () => document.getElementById('loading-overlay');
+
+async function uploadState() {
+    if (API_URL === "YOUR_GAS_DEPLOY_URL" || !API_URL.startsWith('http')) {
+        console.warn("API URL not set. Saving locally only.");
+        localStorage.setItem('lol_builder_v1_state', JSON.stringify(state));
+        return;
+    }
+
+    loadingOverlay().classList.remove('hidden');
+    try {
+        await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(state)
+        });
+    } catch (e) {
+        console.error("Save failed", e);
+        alert("保存に失敗しました");
+    } finally {
+        loadingOverlay().classList.add('hidden');
+    }
+}
+
+async function fetchState() {
+    if (API_URL === "YOUR_GAS_DEPLOY_URL" || !API_URL.startsWith('http')) {
+        console.warn("API URL not set. Loading locally only.");
+        const saved = localStorage.getItem('lol_builder_v1_state');
+        if (saved) {
+            state = JSON.parse(saved);
+        }
+        // Fallthrough to validation
+    } else {
+        loadingOverlay().classList.remove('hidden');
+        try {
+            const res = await fetch(API_URL);
+            const data = await res.json();
+            state = data;
+        } catch (e) {
+            console.error("Load failed", e);
+            alert("読み込みに失敗しました");
+        } finally {
+            loadingOverlay().classList.add('hidden');
+        }
+    }
+
+    // Comprehensive State Validation
+    if (!state.players) state.players = [];
+    if (!state.teams) state.teams = {};
+    if (!state.teams.A) state.teams.A = { Top: null, Jg: null, Mid: null, ADC: null, Sup: null };
+    if (!state.teams.B) state.teams.B = { Top: null, Jg: null, Mid: null, ADC: null, Sup: null };
+}
+
 // --- Initialization ---
 
 document.addEventListener('DOMContentLoaded', () => {
     initApp();
 });
 
-function initApp() {
+async function initApp() {
+    // Initialize Globals
+    drawer = document.getElementById('player-form-drawer');
+    form = document.getElementById('player-form');
+
+    await fetchState(); // Async Load
     renderPlayerGrid();
     renderTeamPanels();
     setupEventListeners();
 }
+
+// ... (rest of code) ...
+
+// In assignPlayerToTeam
+function assignPlayerToTeam(targetTeam, targetLane, playerId) {
+    // ... existing logic ...
+    // 3. Assign to new slot
+    state.teams[targetTeam][targetLane] = playerId;
+
+    uploadState(); // Save
+    renderTeamPanels();
+}
+
+
+
+
 
 // --- Logic ---
 
@@ -39,6 +119,7 @@ function createPlayer(data) {
         ratingTotal: parseInt(data.ratingTotal),
         favoriteLanes: data.favoriteLanes || [],
         favoriteChamps: data.favoriteChamps || "",
+        iconUrl: data.iconUrl || "",
         laneRatings: data.laneRatings || { Top: null, Jg: null, Mid: null, ADC: null, Sup: null }
     };
 }
@@ -63,9 +144,19 @@ function renderPlayerGrid() {
             if (state.selectedPlayerId === player.id) {
                 slot.classList.add('active');
             }
+
+            let iconHtml = `<span class="slot-initials">${player.name.substring(0, 2).toUpperCase()}</span>`;
+            if (player.iconUrl) {
+                slot.classList.add('has-icon');
+                iconHtml = `<img src="${player.iconUrl}" alt="${player.name}">`;
+            } else {
+                slot.classList.remove('has-icon');
+            }
+
+
             slot.innerHTML = `
                 <div class="slot-inner">
-                    <span class="slot-initials">${player.name.substring(0, 2).toUpperCase()}</span>
+                    ${iconHtml}
                     <span class="slot-rate">${player.ratingTotal}</span>
                 </div>
             `;
@@ -161,6 +252,14 @@ function renderPlayerDetail() {
     placeholder.classList.add('hidden');
     content.classList.remove('hidden');
 
+    // Icon in Header
+    const iconDiv = document.getElementById('detail-icon');
+    if (player.iconUrl) {
+        iconDiv.innerHTML = `<img src="${player.iconUrl}">`;
+    } else {
+        iconDiv.innerHTML = `<span class="default-icon">${player.name.charAt(0)}</span>`;
+    }
+
     document.getElementById('detail-name').textContent = player.name;
     document.getElementById('detail-rate').textContent = `Rate: ${player.ratingTotal}`;
     document.getElementById('detail-lanes').textContent = player.favoriteLanes.join(', ') || '-';
@@ -212,7 +311,7 @@ function updateChart(player) {
                         showLabelBackdrop: false
                     },
                     suggestedMin: 0,
-                    suggestedMax: 2000 // Scale to rate?
+                    suggestedMax: 2500 // Scale to rate?
                 }
             },
             plugins: { legend: { display: false } }
@@ -238,12 +337,15 @@ function updateBalanceDisplay() {
 
     const textArea = document.getElementById('balance-text');
 
+    const meter = document.getElementById('tug-meter');
     if (statA.count === 0 && statB.count === 0) {
         textArea.textContent = "評価: 待機中 (メンバー未割り当て)";
+        meter.classList.add('hidden');
         return;
     }
 
     const diff = Math.abs(statA.avg - statB.avg);
+    // ... label logic ...
     let label = "";
     if (diff < 50) label = "ほぼ拮抗";
     else if (diff < 150) label = "やや拮抗";
@@ -253,6 +355,15 @@ function updateBalanceDisplay() {
         Team A: ${statA.avg} / Team B: ${statB.avg}<br>
         <span style="color: var(--accent-gold)">差: ${diff} → ${label}</span>
     `;
+
+    // Tug Logic
+    meter.classList.remove('hidden');
+    const total = statA.avg + statB.avg;
+    const pctA = total > 0 ? (statA.avg / total) * 100 : 50;
+    const pctB = 100 - pctA;
+
+    document.getElementById('tug-bar-a').style.width = `${pctA}%`;
+    document.getElementById('tug-bar-b').style.width = `${pctB}%`;
 
     // Warning
     const warnArea = document.getElementById('balance-warning');
@@ -308,20 +419,25 @@ function assignPlayerToTeam(targetTeam, targetLane, playerId) {
     // 3. Assign to new slot
     state.teams[targetTeam][targetLane] = playerId;
 
+    uploadState();
     renderTeamPanels();
 }
 
 // Side Selection
-document.getElementById('side-select-btn').onclick = () => {
-    // Randomize
-    const isABlue = Math.random() < 0.5;
-    state.side = isABlue ? 'A-Blue' : 'B-Blue';
-    updateSideStyles();
-};
+// (Handler moved to setupEventListeners)
+
+function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+
+    // Auto hide after 3s
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
 
 // Form / Drawer Handling
-const drawer = document.getElementById('player-form-drawer');
-const form = document.getElementById('player-form');
 
 function openDrawer(mode) { // 'create' or 'edit'
     drawer.classList.add('open');
@@ -341,6 +457,12 @@ function openDrawer(mode) { // 'create' or 'edit'
         document.getElementById('input-name').value = player.name;
         document.getElementById('input-rate').value = player.ratingTotal;
         document.getElementById('input-champs').value = player.favoriteChamps;
+        document.getElementById('input-champs').value = player.favoriteChamps;
+        document.getElementById('input-icon-url').value = player.iconUrl || "";
+        // Note: Cannot set file input value programmatically for security
+        pendingIconFile = null;
+        document.getElementById('input-icon').value = ""; // Reset file input
+
 
         // checkboxes
         document.querySelectorAll('input[name="fav-lane"]').forEach(cb => {
@@ -358,80 +480,146 @@ function openDrawer(mode) { // 'create' or 'edit'
     }
 }
 
-document.getElementById('close-drawer').onclick = () => {
-    drawer.classList.remove('open');
-};
-
-document.getElementById('edit-player-btn').onclick = () => {
-    openDrawer('edit');
-};
-
-document.getElementById('delete-btn').onclick = () => {
-    const id = document.getElementById('form-player-id').value;
-    if (confirm('削除しますか？')) {
-        state.players = state.players.filter(p => p.id !== id);
-        if (state.selectedPlayerId === id) state.selectedPlayerId = null;
-
-        // Remove from teams
-        ['A', 'B'].forEach(t => {
-            LANES.forEach(l => {
-                if (state.teams[t][l] === id) state.teams[t][l] = null;
-            });
-        });
-
-        renderPlayerGrid();
-        renderTeamPanels(); // Update team lists (remove option)
-        renderPlayerDetail(); // Clear selection
-        drawer.classList.remove('open');
-    }
-};
-
-form.onsubmit = (e) => {
+async function processFormSubmit(e) {
     e.preventDefault();
-    const id = document.getElementById('form-player-id').value;
-    const name = document.getElementById('input-name').value;
-    const rate = document.getElementById('input-rate').value;
-    const champs = document.getElementById('input-champs').value;
+    loadingOverlay().classList.remove('hidden'); // Start Loading
 
-    const favLanes = [];
-    document.querySelectorAll('input[name="fav-lane"]:checked').forEach(cb => {
-        favLanes.push(cb.value); // top, jg...
-    });
-    // Format favLanes to match case 'Top' etc if needed, but value is lowercase. 
-    // Let's capitalize for display consistency
-    const formattedFavs = favLanes.map(l => l.charAt(0).toUpperCase() + l.slice(1));
+    try {
+        let iconUrl = document.getElementById('input-icon-url').value;
 
-    const laneRates = {
-        Top: document.getElementById('rate-top').value || null,
-        Jg: document.getElementById('rate-jg').value || null,
-        Mid: document.getElementById('rate-mid').value || null,
-        ADC: document.getElementById('rate-adc').value || null,
-        Sup: document.getElementById('rate-sup').value || null,
-    };
-
-    if (id) {
-        // Update
-        const p = getPlayer(id);
-        p.name = name;
-        p.ratingTotal = parseInt(rate);
-        p.favoriteChamps = champs;
-        p.favoriteLanes = formattedFavs;
-        p.laneRatings = laneRates;
-    } else {
-        // Create
-        if (state.players.length >= MAX_PLAYERS) {
-            alert('最大人数です');
-            return;
+        // 1. Upload Image (if selected)
+        if (pendingIconFile) {
+            console.log("Uploading image...", pendingIconFile.name);
+            const base64 = await readFileAsBase64(pendingIconFile);
+            const uploadRes = await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'upload',
+                    fileData: base64,
+                    fileName: pendingIconFile.name,
+                    mimeType: pendingIconFile.type
+                })
+            });
+            const uploadData = await uploadRes.json();
+            if (uploadData.url) {
+                iconUrl = uploadData.url;
+                console.log("Upload success:", iconUrl);
+            } else {
+                console.warn("Upload response:", uploadData);
+                throw new Error(uploadData.error || "Upload failed: Unknown error (check console)");
+            }
         }
-        const newP = createPlayer({
-            name, ratingTotal: rate, favoriteChamps: champs, favoriteLanes: formattedFavs, laneRatings: laneRates
+
+        // 2. Save Player Data
+        const id = document.getElementById('form-player-id').value;
+        const name = document.getElementById('input-name').value;
+        const rate = document.getElementById('input-rate').value;
+        const champs = document.getElementById('input-champs').value;
+
+        const favLanes = [];
+        document.querySelectorAll('input[name="fav-lane"]:checked').forEach(cb => {
+            favLanes.push(cb.value);
         });
-        state.players.push(newP);
+        const formattedFavs = favLanes.map(l => l.charAt(0).toUpperCase() + l.slice(1));
+
+        const laneRates = {
+            Top: document.getElementById('rate-top').value || null,
+            Jg: document.getElementById('rate-jg').value || null,
+            Mid: document.getElementById('rate-mid').value || null,
+            ADC: document.getElementById('rate-adc').value || null,
+            Sup: document.getElementById('rate-sup').value || null,
+        };
+
+        if (id) {
+            const p = getPlayer(id);
+            Object.assign(p, { name, ratingTotal: parseInt(rate), favoriteChamps: champs, favoriteLanes: formattedFavs, laneRatings: laneRates, iconUrl });
+        } else {
+            if (state.players.length >= MAX_PLAYERS) {
+                alert('最大人数です');
+                return;
+            }
+            state.players.push(createPlayer({
+                name, ratingTotal: rate, favoriteChamps: champs, favoriteLanes: formattedFavs, laneRatings: laneRates, iconUrl
+            }));
+        }
+
+        await uploadState(); // Save to Sheet
+        renderPlayerGrid();
+        renderTeamPanels();
+        if (state.selectedPlayerId === id) renderPlayerDetail();
+
+        drawer.classList.remove('open');
+
+    } catch (err) {
+        console.error(err);
+        alert("エラーが発生しました: " + err.message);
+    } finally {
+        loadingOverlay().classList.add('hidden');
+    }
+}
+
+function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            // Remove "data:image/png;base64," prefix for GAS
+            const content = reader.result.split(',')[1];
+            resolve(content);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+function setupEventListeners() {
+    const closeBtn = document.getElementById('close-drawer');
+    if (closeBtn) {
+        closeBtn.onclick = () => {
+            if (drawer) drawer.classList.remove('open');
+        };
     }
 
-    renderPlayerGrid();
-    renderTeamPanels(); // Update dropdowns
-    if (state.selectedPlayerId === id) renderPlayerDetail(); // Update detail if editing active
+    const editBtn = document.getElementById('edit-player-btn');
+    if (editBtn) {
+        editBtn.onclick = () => {
+            openDrawer('edit');
+        };
+    }
 
-    drawer.classList.remove('open');
-};
+    const deleteBtn = document.getElementById('delete-btn');
+    if (deleteBtn) {
+        deleteBtn.onclick = () => {
+            const id = document.getElementById('form-player-id').value;
+            if (confirm('削除しますか？')) {
+                state.players = state.players.filter(p => p.id !== id);
+                if (state.selectedPlayerId === id) state.selectedPlayerId = null;
+
+                // Remove from teams
+                ['A', 'B'].forEach(t => {
+                    LANES.forEach(l => {
+                        if (state.teams[t][l] === id) state.teams[t][l] = null;
+                    });
+                });
+
+                uploadState();
+                renderPlayerGrid();
+                renderTeamPanels(); // Update team lists (remove option)
+                renderPlayerDetail(); // Clear selection
+                if (drawer) drawer.classList.remove('open');
+            }
+        };
+    }
+
+    if (form) {
+        form.onsubmit = processFormSubmit;
+    }
+
+    const fileInput = document.getElementById('input-icon');
+    if (fileInput) {
+        fileInput.onchange = (e) => {
+            if (e.target.files && e.target.files[0]) {
+                pendingIconFile = e.target.files[0];
+            }
+        };
+    }
+}

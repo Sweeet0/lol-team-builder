@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,8 +8,11 @@
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap"
+        rel="stylesheet">
 </head>
+
 <body>
     <div class="app-container">
         <!-- Header -->
@@ -18,6 +22,8 @@
                 <button id="side-select-btn" class="btn btn-secondary">サイド決定</button>
             </div>
         </header>
+
+        <div id="toast" class="toast"></div>
 
         <!-- Top: Player Grid (7x7 -> 2 rows of 7 ideally) -->
         <section class="player-pool-section">
@@ -42,7 +48,7 @@
             <!-- Center: Player Details -->
             <section class="center-panel">
                 <div id="balance-warning" class="balance-warning hidden"></div>
-                
+
                 <!-- This panel shows details of selected player -->
                 <div class="player-detail-card" id="player-detail-card">
                     <p class="placeholder-text">プレイヤーを選択してください</p>
@@ -57,7 +63,7 @@
                             </div>
                             <button id="edit-player-btn" class="btn btn-icon">✎</button>
                         </div>
-                        
+
                         <div class="detail-body">
                             <div class="chart-container">
                                 <!-- Simple Radar Chart Implementation via CSS/SVG can go here later -->
@@ -73,6 +79,12 @@
 
                 <div class="balance-display">
                     <div class="balance-text" id="balance-text">評価: 待機中</div>
+                    <!-- Tug of War Meter -->
+                    <div class="tug-meter-container hidden" id="tug-meter">
+                        <div class="tug-bar tug-bar-a" id="tug-bar-a"></div>
+                        <div class="tug-bar tug-bar-b" id="tug-bar-b"></div>
+                        <div class="tug-marker"></div>
+                    </div>
                 </div>
             </section>
 
@@ -89,6 +101,12 @@
         </main>
     </div>
 
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <div class="loading-text">Syncing...</div>
+    </div>
+
     <!-- Modal / Drawer for Editing -->
     <div class="drawer" id="player-form-drawer">
         <div class="drawer-content">
@@ -98,10 +116,16 @@
             </div>
             <form id="player-form">
                 <input type="hidden" id="form-player-id">
-                
+
                 <div class="form-group">
                     <label>名前 <span class="req">*</span></label>
                     <input type="text" id="input-name" required maxlength="12" placeholder="Name">
+                </div>
+
+                <div class="form-group">
+                    <label for="input-icon">Icon Image</label>
+                    <input type="file" id="input-icon" accept="image/*">
+                    <input type="hidden" id="input-icon-url">
                 </div>
 
                 <div class="form-group">
@@ -149,4 +173,5 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="app.js"></script>
 </body>
+
 </html>
