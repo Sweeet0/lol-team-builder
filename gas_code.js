@@ -52,8 +52,8 @@ function handleImageUpload(data) {
         file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
         // Generate Direct View URL
-        // uc?export=view&id=... allows direct use in <img> tags
-        const fileUrl = "https://drive.google.com/uc?export=view&id=" + file.getId();
+        // use 'https://lh3.googleusercontent.com/d/' for more reliable direct serving
+        const fileUrl = "https://lh3.googleusercontent.com/d/" + file.getId();
 
         // Optional: Log upload to a "Uploads" sheet if desired
         const ss = SpreadsheetApp.getActiveSpreadsheet();

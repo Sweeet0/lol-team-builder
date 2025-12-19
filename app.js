@@ -23,6 +23,11 @@ let state = {
 let drawer, form;
 let pendingIconFile = null; // Store selected file
 
+// Champion Data Cache
+let championData = null;
+const RIOT_VERSION = '15.24.1';
+const RIOT_CDN = `https://ddragon.leagueoflegends.com/cdn/${RIOT_VERSION}`;
+
 
 // --- Persistence (GAS) ---
 const loadingOverlay = () => document.getElementById('loading-overlay');
@@ -88,10 +93,125 @@ async function initApp() {
     drawer = document.getElementById('player-form-drawer');
     form = document.getElementById('player-form');
 
+    await fetchChampionData(); // Load champion data
     await fetchState(); // Async Load
     renderPlayerGrid();
     renderTeamPanels();
     setupEventListeners();
+}
+
+async function fetchChampionData() {
+    try {
+        const response = await fetch(`${RIOT_CDN}/data/en_US/champion.json`);
+        const data = await response.json();
+        championData = Object.values(data.data).sort((a, b) => a.name.localeCompare(b.name));
+        console.log(`Loaded ${championData.length} champions`);
+    } catch (error) {
+        console.error('Failed to load champion data:', error);
+        championData = []; // Fallback to empty array
+    }
+}
+
+// State for champion selection
+let selectedChampions = []; // Store as [{id, name}, ...]
+
+function populateChampionModal(filter = '') {
+    if (!championData || championData.length === 0) return;
+
+    const grid = document.getElementById('champion-grid');
+    grid.innerHTML = '';
+
+    const filtered = championData.filter(champ =>
+        champ.name.toLowerCase().includes(filter.toLowerCase()) ||
+        champ.id.toLowerCase().includes(filter.toLowerCase())
+    );
+
+    filtered.forEach(champ => {
+        const item = document.createElement('div');
+        item.className = 'champion-item';
+        if (selectedChampions.find(c => c.id === champ.id)) {
+            item.classList.add('selected');
+        }
+        item.innerHTML = `
+            <img src="${RIOT_CDN}/img/champion/${champ.id}.png" alt="${champ.name}">
+            <span>${champ.name}</span>
+        `;
+        item.onclick = () => selectChampion(champ.id, champ.name);
+        grid.appendChild(item);
+    });
+}
+
+function selectChampion(champId, champName) {
+    if (selectedChampions.find(c => c.id === champId)) {
+        // Toggle off if already selected
+        removeChampion(champId);
+        updateChampionGridSelection();
+        return;
+    }
+
+    if (selectedChampions.length >= 5) {
+        alert('最大5体まで選択できます');
+        return;
+    }
+
+    selectedChampions.push({ id: champId, name: champName });
+    updateSelectedChampionsDisplay();
+    updateChampionGridSelection();
+}
+
+function removeChampion(champId) {
+    selectedChampions = selectedChampions.filter(c => c.id !== champId);
+    updateSelectedChampionsDisplay();
+    updateChampionGridSelection();
+}
+
+function updateSelectedChampionsDisplay() {
+    const container = document.getElementById('selected-champions');
+    if (!container) return;
+    container.innerHTML = '';
+
+    selectedChampions.forEach(champ => {
+        const badge = document.createElement('div');
+        badge.className = 'selected-champ-badge';
+        badge.innerHTML = `
+            <img src="${RIOT_CDN}/img/champion/${champ.id}.png" alt="${champ.name}">
+            <span>${champ.name}</span>
+            <button type="button" onclick="removeChampion('${champ.id}')">×</button>
+        `;
+        container.appendChild(badge);
+    });
+
+    // Update hidden inputs for form submission compatibility
+    const ids = selectedChampions.map(c => c.id);
+    if (document.getElementById('champ-1')) document.getElementById('champ-1').value = ids[0] || '';
+    if (document.getElementById('champ-2')) document.getElementById('champ-2').value = ids[1] || '';
+    if (document.getElementById('champ-3')) document.getElementById('champ-3').value = ids[2] || '';
+    if (document.getElementById('champ-4')) document.getElementById('champ-4').value = ids[3] || '';
+    if (document.getElementById('champ-5')) document.getElementById('champ-5').value = ids[4] || '';
+}
+
+function openChampionModal() {
+    const modal = document.getElementById('champion-modal');
+    modal.classList.add('open');
+    populateChampionModal();
+}
+
+function closeChampionModal() {
+    const modal = document.getElementById('champion-modal');
+    modal.classList.remove('open');
+    document.getElementById('champion-search').value = '';
+}
+
+function updateChampionGridSelection() {
+    const items = document.querySelectorAll('.champion-item');
+    items.forEach(item => {
+        const champId = item.querySelector('img').alt; // Using alt as ID since we set it in populate
+        // Actually it's better to use dataset or something more robust.
+        // Let's re-populate for simplicity or use the dataset we should have added.
+    });
+    // Re-populating is safer given the dynamic nature
+    const searchVal = document.getElementById('champion-search').value;
+    populateChampionModal(searchVal);
 }
 
 // ... (rest of code) ...
@@ -148,7 +268,7 @@ function renderPlayerGrid() {
             let iconHtml = `<span class="slot-initials">${player.name.substring(0, 2).toUpperCase()}</span>`;
             if (player.iconUrl) {
                 slot.classList.add('has-icon');
-                iconHtml = `<img src="${player.iconUrl}" alt="${player.name}">`;
+                iconHtml = `<img src="${player.iconUrl}" alt="${player.name}" onerror="this.onerror=null; ">`;
             } else {
                 slot.classList.remove('has-icon');
             }
@@ -157,7 +277,6 @@ function renderPlayerGrid() {
             slot.innerHTML = `
                 <div class="slot-inner">
                     ${iconHtml}
-                    <span class="slot-rate">${player.ratingTotal}</span>
                 </div>
             `;
             slot.onclick = () => selectPlayer(player.id);
@@ -257,7 +376,7 @@ function renderPlayerDetail() {
     // Icon in Header
     const iconDiv = document.getElementById('detail-icon');
     if (player.iconUrl) {
-        iconDiv.innerHTML = `<img src="${player.iconUrl}">`;
+        iconDiv.innerHTML = `<img src="${player.iconUrl}" onerror="this.onerror=null;">`;
     } else {
         iconDiv.innerHTML = `<span class="default-icon">${player.name.charAt(0)}</span>`;
     }
@@ -265,7 +384,17 @@ function renderPlayerDetail() {
     document.getElementById('detail-name').textContent = player.name;
     document.getElementById('detail-rate').textContent = `Rate: ${player.ratingTotal}`;
     document.getElementById('detail-lanes').textContent = player.favoriteLanes.join(', ') || '-';
-    document.getElementById('detail-champs').textContent = player.favoriteChamps || '-';
+
+    // Display champion icons
+    const champsEl = document.getElementById('detail-champs');
+    if (player.favoriteChamps && player.favoriteChamps.length > 0) {
+        const icons = player.favoriteChamps.map(champId => {
+            return `<img src="${RIOT_CDN}/img/champion/${champId}.png" alt="${champId}" class="champ-icon" title="${champId}">`;
+        }).join('');
+        champsEl.innerHTML = icons;
+    } else {
+        champsEl.textContent = '-';
+    }
 
     // Chart update placeholder
     updateChart(player);
@@ -432,7 +561,7 @@ function updateBalanceDisplay() {
     // Warning
     const warnArea = document.getElementById('balance-warning');
     if (statA.count !== statB.count) {
-        warnArea.textContent = `人数不均衡 (A:${statA.count} vs B:${statB.count})`;
+        warnArea.textContent = `人数が揃っていません! (A:${statA.count} vs B:${statB.count})`;
         warnArea.classList.remove('hidden');
     } else {
         warnArea.classList.add('hidden');
@@ -557,6 +686,8 @@ function openDrawer(mode) { // 'create' or 'edit'
         document.getElementById('form-title').textContent = "新規プレイヤー";
         document.getElementById('form-player-id').value = "";
         document.getElementById('delete-btn').classList.add('hidden');
+        selectedChampions = [];
+        updateSelectedChampionsDisplay();
     } else if (mode === 'edit') {
         const player = getPlayer(state.selectedPlayerId);
         if (!player) return;
@@ -566,8 +697,14 @@ function openDrawer(mode) { // 'create' or 'edit'
         document.getElementById('form-player-id').value = player.id;
         document.getElementById('input-name').value = player.name;
         document.getElementById('input-rate').value = player.ratingTotal;
-        document.getElementById('input-champs').value = player.favoriteChamps;
-        document.getElementById('input-champs').value = player.favoriteChamps;
+
+        // Set champion selects
+        selectedChampions = (player.favoriteChamps || []).map(id => {
+            const champ = championData.find(c => c.id === id);
+            return { id, name: champ ? champ.name : id };
+        });
+        updateSelectedChampionsDisplay();
+
         document.getElementById('input-icon-url').value = player.iconUrl || "";
         // Note: Cannot set file input value programmatically for security
         pendingIconFile = null;
@@ -592,6 +729,10 @@ function openDrawer(mode) { // 'create' or 'edit'
 
 async function processFormSubmit(e) {
     e.preventDefault();
+
+    const submitButton = document.getElementById('submit-btn');
+    submitButton.disabled = true;
+
     loadingOverlay().classList.remove('hidden'); // Start Loading
 
     try {
@@ -624,7 +765,15 @@ async function processFormSubmit(e) {
         const id = document.getElementById('form-player-id').value;
         const name = document.getElementById('input-name').value;
         const rate = document.getElementById('input-rate').value;
-        const champs = document.getElementById('input-champs').value;
+
+        // Collect champion IDs from selects
+        const champs = [
+            document.getElementById('champ-1').value,
+            document.getElementById('champ-2').value,
+            document.getElementById('champ-3').value,
+            document.getElementById('champ-4').value,
+            document.getElementById('champ-5').value
+        ].filter(c => c); // Remove empty selections
 
         const favLanes = [];
         document.querySelectorAll('input[name="fav-lane"]:checked').forEach(cb => {
@@ -664,6 +813,7 @@ async function processFormSubmit(e) {
         console.error(err);
         alert("エラーが発生しました: " + err.message);
     } finally {
+        submitButton.disabled = false;
         loadingOverlay().classList.add('hidden');
     }
 }
@@ -682,11 +832,24 @@ function readFileAsBase64(file) {
 }
 
 function setupEventListeners() {
+
     const closeBtn = document.getElementById('close-drawer');
     if (closeBtn) {
         closeBtn.onclick = () => {
             if (drawer) drawer.classList.remove('open');
         };
+    }
+
+    // Champion Modal Listeners
+    const addChampBtn = document.getElementById('add-champion-btn');
+    if (addChampBtn) addChampBtn.onclick = openChampionModal;
+
+    const closeChampModalBtn = document.getElementById('close-champion-modal');
+    if (closeChampModalBtn) closeChampModalBtn.onclick = closeChampionModal;
+
+    const champSearch = document.getElementById('champion-search');
+    if (champSearch) {
+        champSearch.oninput = (e) => populateChampionModal(e.target.value);
     }
 
     const editBtn = document.getElementById('edit-player-btn');
