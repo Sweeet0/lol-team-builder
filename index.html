@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoL Team Builder</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>LoL Team Builder</h1>
+            <div class="header-controls">
+                <button id="side-select-btn" class="btn btn-secondary">サイド決定</button>
+            </div>
+        </header>
+
+        <!-- Top: Player Grid (7x7 -> 2 rows of 7 ideally) -->
+        <section class="player-pool-section">
+            <div class="player-grid" id="player-grid">
+                <!-- Javascript will populate 14 slots here -->
+            </div>
+        </section>
+
+        <!-- Main Workspace -->
+        <main class="workspace">
+            <!-- Left: Team A -->
+            <section class="team-panel" id="team-a-panel">
+                <div class="team-header" id="team-a-header">
+                    <h2>Team A</h2>
+                    <div class="team-stat">Avg: <span id="team-a-avg">-</span></div>
+                </div>
+                <div class="lane-list" id="team-a-lanes">
+                    <!-- Lanes populated by JS -->
+                </div>
+            </section>
+
+            <!-- Center: Player Details -->
+            <section class="center-panel">
+                <div id="balance-warning" class="balance-warning hidden"></div>
+                
+                <!-- This panel shows details of selected player -->
+                <div class="player-detail-card" id="player-detail-card">
+                    <p class="placeholder-text">プレイヤーを選択してください</p>
+                    <div class="detail-content hidden">
+                        <div class="detail-header">
+                            <div class="detail-icon" id="detail-icon"></div>
+                            <div class="detail-info">
+                                <h3 id="detail-name">Player Name</h3>
+                                <div class="detail-badges">
+                                    <span class="badge" id="detail-rate">Rate: 1500</span>
+                                </div>
+                            </div>
+                            <button id="edit-player-btn" class="btn btn-icon">✎</button>
+                        </div>
+                        
+                        <div class="detail-body">
+                            <div class="chart-container">
+                                <!-- Simple Radar Chart Implementation via CSS/SVG can go here later -->
+                                <canvas id="rate-chart" width="200" height="200"></canvas>
+                            </div>
+                            <div class="detail-text">
+                                <p><strong>得意レーン:</strong> <span id="detail-lanes">-</span></p>
+                                <p><strong>Champs:</strong> <span id="detail-champs">-</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="balance-display">
+                    <div class="balance-text" id="balance-text">評価: 待機中</div>
+                </div>
+            </section>
+
+            <!-- Right: Team B -->
+            <section class="team-panel" id="team-b-panel">
+                <div class="team-header" id="team-b-header">
+                    <h2>Team B</h2>
+                    <div class="team-stat">Avg: <span id="team-b-avg">-</span></div>
+                </div>
+                <div class="lane-list" id="team-b-lanes">
+                    <!-- Lanes populated by JS -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal / Drawer for Editing -->
+    <div class="drawer" id="player-form-drawer">
+        <div class="drawer-content">
+            <div class="drawer-header">
+                <h3 id="form-title">新規プレイヤー</h3>
+                <button class="close-btn" id="close-drawer">×</button>
+            </div>
+            <form id="player-form">
+                <input type="hidden" id="form-player-id">
+                
+                <div class="form-group">
+                    <label>名前 <span class="req">*</span></label>
+                    <input type="text" id="input-name" required maxlength="12" placeholder="Name">
+                </div>
+
+                <div class="form-group">
+                    <label>総合レート <span class="req">*</span></label>
+                    <input type="number" id="input-rate" required min="0" max="3000" placeholder="1500">
+                </div>
+
+                <div class="form-group">
+                    <label>得意レーン</label>
+                    <div class="checkbox-group">
+                        <label><input type="checkbox" name="fav-lane" value="top"> Top</label>
+                        <label><input type="checkbox" name="fav-lane" value="jg"> Jg</label>
+                        <label><input type="checkbox" name="fav-lane" value="mid"> Mid</label>
+                        <label><input type="checkbox" name="fav-lane" value="adc"> ADC</label>
+                        <label><input type="checkbox" name="fav-lane" value="sup"> Sup</label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>得意チャンピオン</label>
+                    <input type="text" id="input-champs" placeholder="Ahri, Lee Sin...">
+                </div>
+
+                <!-- Advanced Rates (Collapsible or just listed) -->
+                <details class="advanced-rates">
+                    <summary>レーン別レート (任意)</summary>
+                    <div class="grid-2-col">
+                        <input type="number" id="rate-top" placeholder="Top">
+                        <input type="number" id="rate-jg" placeholder="Jg">
+                        <input type="number" id="rate-mid" placeholder="Mid">
+                        <input type="number" id="rate-adc" placeholder="ADC">
+                        <input type="number" id="rate-sup" placeholder="Sup">
+                    </div>
+                </details>
+
+                <div class="form-actions">
+                    <button type="button" id="delete-btn" class="btn btn-danger hidden">削除</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Chart.js CDN (Safe to use, but will fallback gracefully if offline) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
